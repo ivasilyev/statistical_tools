@@ -82,7 +82,9 @@ def counter_df2plot(df, plot_title, path):
         # Remove zero-only columns
         df = df.loc[:, [i for i in list(df) if df.loc[:, i].sum() != 0]]
     except KeyError:
-        print("Cannot make plots for table:", path + plot_title + ".tsv")
+        # The dataframe 'adjusted_rows' is not a real table, but a dump
+        if "adjusted_rows" not in plot_title:
+            print("Cannot make plots for table:", path + plot_title + ".tsv")
         return
     fig = plt.figure(figsize=(12, 5))
     rotated_pairs_df = df.apply(lambda x: 100 * x / float(x.sum())).transpose()
@@ -255,18 +257,11 @@ def multi_core_queue(function_to_parallelize, queue):
 if __name__ == '__main__':
     suffixesFileName, groupDataFileName, filterWordsFileName, keyWordTopRowsNumber, controlWordsList, composeMethod, adjustmentMethod, indexColName, valueColName, inputAlpha, noFilterBool, outputDir = parse_namespace()
     scriptDir = ends_with_slash(os.path.dirname(os.path.realpath(sys.argv[0])))
-    # python3 /home/biouser/scripts/ivasilyev/statistical_tools/suffixes2statistics.py -s /data2/bio/sandbox/groupdata/suffixes.tsv -g /data2/bio/Metagenomes/SampleData/GROUPDATA_HP_checkpoints_raw.tsv -f /data2/bio/sandbox/groupdata/words.tsv -t 10 -c srr C -m u-test -r fdr_bh -i reference_id -v id_mapped_reads_per_million_sample_total_reads -a 0.05 -o /data2/bio/sandbox/groupdata/test1/
-    # suffixesFileName, groupDataFileName, filterWordsFileName, keyWordTopRowsNumber, controlWordsList, indexColName, valueColName, inputAlpha, noFilterBool, outputDir = "/data2/bio/sandbox/groupdata/suffixes.tsv", "/data2/bio/Metagenomes/SampleData/GROUPDATA_HP_checkpoints_raw.tsv", "/data2/bio/sandbox/groupdata/words.tsv", 10, ['srr', 'C'], "reference_id", "id_mapped_reads_per_million_sample_total_reads", 0.05, False, "/data2/bio/sandbox/groupdata/test/"
-    # composeMethod = "u-test"
-    # adjustmentMethod = "fdr_bh"
-    # scriptDir = ends_with_slash("/home/biouser/scripts/ivasilyev/statistical_tools")
     os.chdir(scriptDir)
     suffixesDF = pd.read_table(suffixesFileName, sep='\t', header='infer', names=["alias", "prefix", "suffix"]).set_index("alias")
     groupDataRawDF = pd.read_table(groupDataFileName, sep='\t', header='infer', names=["sample_name", "group_name"])
     filterWordsList = [i.lower() for i in file_to_list(filterWordsFileName)]
     for alias_string in suffixesDF.index.values:
-        # alias_string = 'MvirDB'
-        # alias_string = 'viromes'
         prefix_string, suffix_string = suffixesDF.ix[alias_string].tolist()
         groupdata_processed_df = groupDataRawDF.copy()
         groupdata_processed_df["file_name"] = groupdata_processed_df.loc[:, "sample_name"].apply(lambda x: prefix_string + x + suffix_string)
