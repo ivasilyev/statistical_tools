@@ -9,8 +9,6 @@ import os
 import sys
 import statsmodels.sandbox.stats.multicomp
 
-assert sys.version_info >= (2, 7)
-
 
 def parse_args():
     starting_parser = argparse.ArgumentParser(description="This tool counts statistics from linker file containing two tab-delimited columns without a header. The first column must contain file path, the second - group name.")
@@ -44,8 +42,8 @@ def parse_namespace():
 def is_path_exists(path):
     try:
         os.makedirs(path)
-    except OSError as exception:
-        print(exception)
+    except OSError:
+        pass
 
 
 def find_existing_files(paths_list):
@@ -102,13 +100,6 @@ def merge_dicts(*args):
     return output_dict
 
 
-def dict2pd_series(dictionary):
-    output = pd.Series()
-    for key in dictionary:
-        output = output.set_value(key, dictionary[key])
-    return output
-
-
 def values2pvals_dict(list_1, list_2):
     output_dict = {}
     for method_name, method_function in zip(["t-test", "u-test", "wilcoxon", "h-test"], [scipy.stats.ttest_ind, scipy.stats.mannwhitneyu, scipy.stats.ranksums, scipy.stats.kruskal]):
@@ -153,11 +144,13 @@ def row2multitest(pvals_list, input_colnames_list):
     return output_dict
 
 
+def read_table_slice(table_file_name):
+    df = pd.read_table(table_file_name, sep='\t', header=0, engine='python')
+    output_dataframe = df.loc[:, [indexColName, valueColName]]
+    return output_dataframe.rename(columns={valueColName: table_file_name})
+
+
 def mp_group_name2df(group_name):
-    def read_table_slice(table_file_name):
-        df = pd.read_table(table_file_name, sep='\t', header=0, engine='python')
-        output_dataframe = df.loc[:, [indexColName, valueColName]]
-        return output_dataframe.rename(columns={valueColName: table_file_name})
     group_dataframe = pd.DataFrame()
     group_files_list = groupDataDF.loc[groupDataDF['group_name'] == group_name, 'file_name'].values.tolist()
     if len(group_files_list) < 2:
@@ -175,6 +168,23 @@ def mp_group_name2df(group_name):
         group_dataframe.to_csv(pivot_file_name, sep='\t', index=False)
         print("Dumped the group '" + group_name + "' pivot:", pivot_file_name)
     return group_name, group_dataframe
+
+
+def dict2pd_series(dictionary):
+    output = pd.Series()
+    for key in dictionary:
+        output = output.set_value(key, dictionary[key])
+    return output
+
+
+def pd_series_list2df(input_list, sorting_column):
+    df = pd.DataFrame()
+    for series in input_list:
+        if len(df) == 0:
+            df = pd.DataFrame([series])
+        else:
+            df = df.append(series, ignore_index=True)
+    return df.sort_values(sorting_column)
 
 
 def mp_index2pvals(index_string):
@@ -203,20 +213,46 @@ def mp_index2pvals(index_string):
 def mp_adjust_method_pvals(index_string):
     adjusted_pvals_dict = {indexColName: index_string}
     adjusted_pvals_dict.update(row2multitest(valuesSubDF.loc[index_string, :].astype('float64').values.tolist(), list(valuesSubDF)))
-    return adjusted_pvals_dict
+    return dict2pd_series(adjusted_pvals_dict)
+
+
+def mp_assemble_pvals_tables_dict(key):
+    statistical_tests_dfs_dict = {i: pd.DataFrame() for i in values2pvals_dict([], [])}
+    for compared_indexes_method_dict in groupPairsMethodsDictsRowsDict[key]:
+        for statistical_test in statistical_tests_dfs_dict:
+            if len(statistical_tests_dfs_dict[statistical_test]) == 0:
+                statistical_tests_dfs_dict[statistical_test] = pd.DataFrame([compared_indexes_method_dict[statistical_test]])
+            else:
+                statistical_tests_dfs_dict[statistical_test] = statistical_tests_dfs_dict[statistical_test].append(compared_indexes_method_dict[statistical_test], ignore_index=True)
+    print("Completed combining p-values methods data:", key)
+    for statistical_test in statistical_tests_dfs_dict:
+        statistical_tests_df = statistical_tests_dfs_dict[statistical_test]
+        statistical_tests_df['is_rejected'] = statistical_tests_df['p-value'] < globalAlpha
+        if not noFilterBool:
+            statistical_tests_df = statistical_tests_df.loc[statistical_tests_df['p-value'] < globalAlpha]
+        statistical_tests_df.to_csv(outputDir + "comparison_by_" + valueColName + "_" + key + "_" + statistical_test + ".tsv", sep='\t', index=False)
+        statistical_tests_dfs_dict[statistical_test] = statistical_tests_df
+    return key, statistical_tests_dfs_dict
+
+
+def mp_assemble_adjusted_tables_dict(key):
+    df = pd_series_list2df(adjustedValuesDictsListsDict[key], indexColName)
+    method_df = valuesMethodsDFsDict[key]
+    adjusted_total_df = pd.merge(method_df.loc[:, [indexColName] + [i for i in list(method_df) if any(j in i for j in ["prevalent", "p-value", "is_rejected"])]], df, on=indexColName, how='left')
+    adjusted_total_df['non_zero_hypothesis_count'] = adjusted_total_df.loc[:, [i for i in list(adjusted_total_df) if i != indexColName]].applymap(lambda var: str(var) == 'True').sum(axis=1)
+    output_file = outputDir + '_'.join(["adjusted_p-values_for_groups", *sorted([i for i in groupsDict]), "for_method", key, "by", valueColName, "for_alpha", str(globalAlpha) + ".tsv"])
+    adjusted_total_df.sort_values(by='non_zero_hypothesis_count', ascending=False).to_csv(output_file, sep='\t', index=False)
+    print("Dumped adjusted p-values table:", output_file)
 
 
 if __name__ == '__main__':
     inputGroupDataFile, indexColName, valueColName, globalAlpha, noFilterBool, outputDir = parse_namespace()
-    # inputGroupDataFile, indexColName, valueColName, globalAlpha, noFilterBool, outputDir = ['/data1/bio/projects/Danilova_Natalya/IGC_KOs_for_acetate.groupdata', 'reference_id', 'id_mapped_reads_per_million_sample_total_reads', 0.05, False, '/data1/bio/projects/Danilova_Natalya/test/']
-    # inputGroupDataFile, indexColName, valueColName, globalAlpha, noFilterBool, outputDir = ['/data2/bio/Metagenomes/SampleData/CARD_HP_C_1_2_3.groupdata', 'reference_id', 'id_mapped_reads_per_million_sample_total_reads', 0.05, False, '/data2/bio/Metagenomes/ABR/CARD/pvals/']
     print("Creating directory:", outputDir)
     is_path_exists(outputDir)
     print("Parsing groups")
     groupDataDF = pd.read_table(inputGroupDataFile, sep='\t', header='infer', names=['file_name', 'group_name'], engine='python')
     groupsRawList = sorted(groupDataDF['group_name'].unique().tolist())
     print("Merging data from groups:", "'" + "', '".join(groupsRawList) + "'")
-
     groupsDict = {}
     for parsedGroupName, parsedGroupDF in multi_core_queue(mp_group_name2df, groupsRawList):
         if len(parsedGroupDF) > 0:
@@ -228,44 +264,22 @@ if __name__ == '__main__':
     print("Successfully parsed groups:", "'" + "', '".join(list(groupsDict)) + "'")
     groupsPairs2DArray = list2pairwise_tuples(list(groupsDict))
     print("Pairs to count p-values:", "'" + "', '".join(list(["_vs_".join(i) for i in groupsPairs2DArray])) + "'")
-
-    comparedIndexesMethodsDictsLists2DArray = []
-
-    groupDictPairsDict = {}
+    groupPairsMethodsDictsRowsDict = {}
     for groupPairList in groupsPairs2DArray:
-        print("Comparing groups:", "'" + "' vs '".join(str(i) for i in groupPairList) + "'")
+        groupPairString = "_vs_".join(str(i) for i in groupPairList)
         groupPairDF_1, groupPairDF_2 = [groupsDict[i] for i in groupPairList]
-        groupMergedDF = pd.merge(groupPairDF_1, groupPairDF_2, on=indexColName, how='outer').fillna(0).set_index(indexColName)
-        valuesColumnsList_1, valuesColumnsList_2 = [[i for i in list(groupPairDF_1) if i != indexColName], [j for j in list(groupPairDF_2) if j != indexColName]]
-        comparedIndexesMethodsDictsLists2DArray.append([groupPairList, multi_core_queue(mp_index2pvals, groupMergedDF.index.tolist())])
-
-    def mp_assemble_pvals_tables_dict(input_list):
-        group_pair_list, compared_indexes_methods_dicts_list = input_list
-        # Assemble dataframe
-        statistical_tests_dfs_dict = {i: pd.DataFrame() for i in values2pvals_dict([], [])}
-        for compared_indexes_method_dict in compared_indexes_methods_dicts_list:
-            for statistical_test in statistical_tests_dfs_dict:
-                if len(statistical_tests_dfs_dict[statistical_test]) == 0:
-                    statistical_tests_dfs_dict[statistical_test] = pd.DataFrame([compared_indexes_method_dict[statistical_test]])
-                else:
-                    statistical_tests_dfs_dict[statistical_test] = statistical_tests_dfs_dict[statistical_test].append(compared_indexes_method_dict[statistical_test], ignore_index=True)
-        print("Completed combining p-values methods data")
-        for statistical_test in statistical_tests_dfs_dict:
-            statistical_tests_df = statistical_tests_dfs_dict[statistical_test]
-            statistical_tests_df['is_rejected'] = statistical_tests_df['p-value'] < globalAlpha
-            if not noFilterBool:
-                statistical_tests_df = statistical_tests_df.loc[statistical_tests_df['p-value'] < globalAlpha]
-            statistical_tests_df.to_csv(outputDir + "comparison_by_" + valueColName + "_" + "_vs_".join(str(i) for i in group_pair_list) + "_" + statistical_test + ".tsv", sep='\t', index=False)
-            statistical_tests_dfs_dict[statistical_test] = statistical_tests_df
-        global groupDictPairsDict
-        groupDictPairsDict["_vs_".join(str(i) for i in group_pair_list)] = statistical_tests_dfs_dict
-
-
-    multi_core_queue(mp_assemble_pvals_tables_dict, comparedIndexesMethodsDictsLists2DArray)
-
+        groupMergedDF = pd.merge(groupPairDF_1, groupPairDF_2, on=indexColName, how='outer').fillna(0).set_index(
+            indexColName)
+        valuesColumnsList_1, valuesColumnsList_2 = [[i for i in list(groupPairDF_1) if i != indexColName],
+                                                    [j for j in list(groupPairDF_2) if j != indexColName]]
+        groupPairsMethodsDictsRowsDict[groupPairString] = multi_core_queue(mp_index2pvals, groupMergedDF.index.tolist())
+        print("Finished multi-method comparison:", groupPairString)
+    groupDictPairsDict = {}
+    for statisticalTestsDFsDictKeyword, StatisticalTestsDFsDict in multi_core_queue(mp_assemble_pvals_tables_dict, groupPairsMethodsDictsRowsDict):
+        groupDictPairsDict[statisticalTestsDFsDictKeyword] = StatisticalTestsDFsDict
     methodsDictDFsDict = unpack_methods()
-    print("Adjusting p-values")
-
+    valuesMethodsDFsDict = {}
+    adjustedValuesDictsListsDict = {}
     for methodsDictDFsDictKey in methodsDictDFsDict:
         valuesMethodDF = pd.DataFrame()
         methodsDFsDict = methodsDictDFsDict[methodsDictDFsDictKey]
@@ -275,24 +289,14 @@ if __name__ == '__main__':
                 valuesMethodDF = methodDF
             else:
                 valuesMethodDF = pd.merge(valuesMethodDF, methodDF, on=indexColName, how='outer')
-        valuesSubDF = valuesMethodDF.loc[:, [i for i in list(valuesMethodDF) if i == indexColName or 'p-value' in i]].set_index(indexColName).fillna(1)
+        valuesMethodsDFsDict[methodsDictDFsDictKey] = valuesMethodDF.sort_values(indexColName)
+        valuesSubDF = valuesMethodDF.loc[:, [i for i in list(valuesMethodDF) if i == indexColName or 'p-value' in i]].set_index(
+            indexColName).fillna(1)
         valuesSubDFIndexList = valuesSubDF.index.tolist()
         if len(valuesSubDFIndexList) == 0:
             print("None values to analyze left for method", methodsDictDFsDictKey)
         else:
-            adjustedValuesDictsList = multi_core_queue(mp_adjust_method_pvals, valuesSubDFIndexList)
-
-            def mp_assemble_adjusted_tables_dict(adjusted_values_dict):
-                adjusted_values_method_df = pd.DataFrame()
-                if len(adjusted_values_method_df) == 0:
-                    adjusted_values_method_df = pd.DataFrame([dict2pd_series(adjusted_values_dict)])
-                else:
-                    adjusted_values_method_df = adjusted_values_method_df.append(dict2pd_series(adjusted_values_dict), ignore_index=True)
-                adjusted_total_df = pd.merge(valuesMethodDF.loc[:, [indexColName] + [i for i in list(valuesMethodDF) if any(j in i for j in["prevalent", "p-value", "is_rejected"])]], adjusted_values_method_df, on=indexColName, how='left')
-                adjusted_total_df['non_zero_hypothesis_count'] = adjusted_total_df.loc[:, [i for i in list(adjusted_total_df) if i != indexColName]].applymap(lambda var: str(var) == 'True').sum(axis=1)
-                adjusted_total_df.sort_values(by='non_zero_hypothesis_count', ascending=False).to_csv(outputDir + '_'.join(["adjusted_p-values_for_groups", *sorted([i for i in groupsDict]), "for_method", methodsDictDFsDictKey, "by", valueColName, "for_alpha", str(globalAlpha) + ".tsv"]), sep='\t', index=False)
-                print("Adjusted p-values for", methodsDictDFsDictKey)
-
-            multi_core_queue(mp_assemble_adjusted_tables_dict, adjustedValuesDictsList)
-
+            print("Adjusting p-values for method:", methodsDictDFsDictKey)
+            adjustedValuesDictsListsDict[methodsDictDFsDictKey] = multi_core_queue(mp_adjust_method_pvals, valuesSubDFIndexList)
+    tmp = multi_core_queue(mp_assemble_adjusted_tables_dict, adjustedValuesDictsListsDict)
     print("Completed. Check the directory:", outputDir[:-1])
