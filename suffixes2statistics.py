@@ -122,7 +122,8 @@ def controls2pairing_dict(input_list):
     control_groups_list = [i for i in controlWordsList if i in input_list][:2]
     test_groups_list = [i for i in input_list if i not in controlWordsList]
     if len(input_list) > 3:
-        output_dict["near"] = [[i, input_list[input_list.index(i) + 1]] for i in input_list if input_list.index(i) != (len(input_list) - 1)]
+        # Index-based control groups attachment
+        output_dict["near"] = [control_groups_list] + [[i, test_groups_list[test_groups_list.index(i) + 1]] for i in test_groups_list if test_groups_list.index(i) != (len(test_groups_list) - 1)]
         if len(control_groups_list) > 0:
             output_dict["on_first_control"] = [[control_groups_list[0], j] for j in test_groups_list]
         if len(control_groups_list) > 1:
