@@ -129,7 +129,7 @@ def controls2pairing_dict(input_list):
         if len(control_groups_list) > 1:
             output_dict["on_second_control"] = [[control_groups_list[1], j] for j in test_groups_list]
     else:
-        output_dict["'free-for-all"] = list2pairwise_tuples(input_list)
+        output_dict["free-for-all"] = list2pairwise_tuples(input_list)
     return output_dict
 
 
