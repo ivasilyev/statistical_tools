@@ -68,7 +68,7 @@ class ComparingGroupParser:
         return output_dataframe.rename(columns={valueColName: table_file_name})
     def group_name2df(self):
         group_dataframe = pd.DataFrame()
-        group_files_list = groupDataDF.loc[groupDataDF['self.name'] == self.name, 'file_name'].values.tolist()
+        group_files_list = groupDataDF.loc[groupDataDF["group_name"] == self.name, "file_name"].values.tolist()
         if len(group_files_list) < 2:
             print("Excluded group due to the files number smaller than 2:", self.name)
         else:
@@ -345,12 +345,12 @@ class Exporter:
         return out
     @staticmethod
     def _mp_count_rejected_null_hypothesis(series):
-        output_dict = {"null_hypothesis_rejected_counter": len([i for i in series.values.tolist() if i == 'True'])}
+        output_dict = {"null_hypothesis_rejections_counter": len([i for i in series.values.tolist() if i == 'True'])}
         return pd.Series(ComparingGroupParser.dict2pd_series(output_dict), name=series.name)
     def concat_rejected_counter(self, input_df):
         queue = [input_df.loc[i, :] for i in input_df.index.tolist()]
         df = pd.concat(multi_core_queue(self._mp_count_rejected_null_hypothesis, queue), axis=1).transpose()
-        output_df = pd.concat([input_df, df], axis=1).sort_values(by="null_hypothesis_rejected_counter", ascending=False)
+        output_df = pd.concat([input_df, df], axis=1).sort_values(by="null_hypothesis_rejections_counter", ascending=False)
         return output_df
 
 
@@ -359,13 +359,13 @@ if __name__ == '__main__':
     is_path_exists(outputDir)
 
     print("Parsing groups data")
-    groupDataDF = pd.read_table(inputGroupDataFileName, sep='\t', header='infer', names=["file_name", "self.name"], engine='python')
+    groupDataDF = pd.read_table(inputGroupDataFileName, sep='\t', header='infer', names=["file_name", "group_name"], engine='python')
     print("Validating files")
     groupDataDF = groupDataDF.loc[groupDataDF["file_name"].map(lambda x: os.path.isfile(x))]
     if len(groupDataDF) == 0:
         raise ValueError("No valid files found!")
 
-    groupsRawList = sorted(groupDataDF['self.name'].unique().tolist())
+    groupsRawList = sorted(groupDataDF["group_name"].unique().tolist())
     groupsParsedList = [ComparingGroupParser(i) for i in groupsRawList]
     groupsParsedList = [i for i in groupsParsedList if len(i) > 0 and i.width > 0]
     print("Groups to process: " + "'" + "', '".join([i.name for i in groupsParsedList]) + "'")
