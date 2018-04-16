@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-# Pre-setup:
-export DOCKER_IMAGE_NAME=ivasilyev/curated_projects:latest && \
-docker pull ${DOCKER_IMAGE_NAME} && \
-docker run --rm -v /data:/data -v /data1:/data1 -v /data2:/data2 --net=host --env="DISPLAY" -it ${DOCKER_IMAGE_NAME} python3
-
-"""
-
-
 import argparse
 import pandas as pd
 import numpy as np
@@ -46,7 +37,7 @@ def ends_with_slash(string):
 
 def parse_namespace():
     namespace = parse_args()
-    return namespace.groupdata, namespace.index, namespace.value, namespace.alpha, namespace.no_filter, ends_with_slash(namespace.output)
+    return namespace.groupdata, namespace.index, namespace.value, namespace.alpha, namespace.no_filter, namespace.output
 
 
 def multi_core_queue(function_to_parallelize, queue):
@@ -361,54 +352,26 @@ class Visualizer:
 
 
 if __name__ == '__main__':
-    # inputGroupDataFileName, indexColName, valueColName, globalAlpha, noFilterBool, outputDir = parse_namespace()
-    pass
+    inputGroupDataFileName, indexColName, valueColName, globalAlpha, noFilterBool, outputDir = parse_namespace()
+    outputDir = ends_with_slash(outputDir)
+    os.makedirs(outputDir, exist_ok=True)
 
-inputGroupDataFileName = "/data1/bio/projects/tgrigoreva/25_ecoli_genes/groupdata/free_for_all.groupdata"
-indexColName = "reference_id"
-valueColName = "id_mapped_relative_abundance"
-globalAlpha = 0.05
-noFilterBool = False
-outputDir = "/data1/bio/projects/tgrigoreva/25_ecoli_genes/pvals"
+    print("Parsing groups data")
+    groupDataDF = pd.read_table(inputGroupDataFileName, sep='\t', header='infer', names=["file_name", "group_name"], engine='python')
+    print("Validating files")
+    groupDataDF = groupDataDF.loc[groupDataDF["file_name"].map(lambda x: os.path.isfile(x))]
+    if len(groupDataDF) == 0:
+        raise ValueError("No valid files found!")
 
-outputDir = ends_with_slash(outputDir)
-os.makedirs(outputDir, exist_ok=True)
-
-print("Parsing groups data")
-groupDataDF = pd.read_table(inputGroupDataFileName, sep='\t', header='infer', names=["file_name", "group_name"], engine='python')
-print("Validating files")
-groupDataDF = groupDataDF.loc[groupDataDF["file_name"].map(lambda x: os.path.isfile(x))]
-if len(groupDataDF) == 0:
-    raise ValueError("No valid files found!")
-
-groupsRawList = sorted(groupDataDF["group_name"].unique().tolist())
-groupsParsedList = [ComparingGroupParser(i) for i in groupsRawList]
-groupsParsedList = [i for i in groupsParsedList if len(i) > 0 and i.width > 0]
-print("Groups to process: " + "'" + "', '".join([i.name for i in groupsParsedList]) + "'")
-indexList = sorted(list(set([k for j in [i.get_index_list() for i in groupsParsedList] for k in j])))
-groupsTuplesList = GroupComparator.create_comparisons_list()
-groupComparisonsList = [GroupComparator(i) for i in groupsTuplesList]
-correctionObject = MultipleComparator()
-exporter = Exporter()
-exporterDF = exporter.merge_everything()
-exporter.concat_rejected_counter(exporterDF).reset_index().to_csv(outputDir + '_'.join([i.name for i in groupsParsedList]) + "_total_dataframe.tsv", sep='\t', index=False)
-print("Completed")
-
-os.environ["DISPLAY"] = "0.0"
-import matplotlib as mpl
-mpl.use('Agg')
-from matplotlib import pyplot as plt
-
-
-
-# for group in groupsParsedList
-os.makedirs(outputDir + "/plots/", exist_ok=True)
-group = groupsParsedList[0]
-df = group.pivot_df
-fig = plt.figure(figsize=(12, 5))
-df.boxplot(by=indexColName, return_type="axes")
-plt.savefig(outputDir + "/plots/name.png", dpi=600)
-plt.close()
-
-plt.boxplot(df)
-plt.savefig(outputDir + "/plots/name.png", dpi=600)
+    groupsRawList = sorted(groupDataDF["group_name"].unique().tolist())
+    groupsParsedList = [ComparingGroupParser(i) for i in groupsRawList]
+    groupsParsedList = [i for i in groupsParsedList if len(i) > 0 and i.width > 0]
+    print("Groups to process: " + "'" + "', '".join([i.name for i in groupsParsedList]) + "'")
+    indexList = sorted(list(set([k for j in [i.get_index_list() for i in groupsParsedList] for k in j])))
+    groupsTuplesList = GroupComparator.create_comparisons_list()
+    groupComparisonsList = [GroupComparator(i) for i in groupsTuplesList]
+    correctionObject = MultipleComparator()
+    exporter = Exporter()
+    exporterDF = exporter.merge_everything()
+    exporter.concat_rejected_counter(exporterDF).reset_index().to_csv(outputDir + '_'.join([i.name for i in groupsParsedList]) + "_total_dataframe.tsv", sep='\t', index=False)
+    print("Completed")
