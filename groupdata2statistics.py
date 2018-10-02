@@ -14,7 +14,12 @@ import statistics
 def parse_args():
     starting_parser = argparse.ArgumentParser(description="This tool counts statistics from linker file containing two tab-delimited columns without a header. The first column must contain file path, the second - group name.")
     starting_parser.add_argument("-g", "--groupdata", required=True,
-                                 help="Text file without a header containing two tab-delimited columns: file path and group name")
+                                 help="Text file without a header containing two tab-delimited columns: file path and group name"
+                                      "If suffix and prefix are provided, combines path as <prefix><sample_name><suffix>")
+    starting_parser.add_argument("-p", "--prefix", default="",
+                                 help="(Optional) File path prefix")
+    starting_parser.add_argument("-s", "--suffix", default="",
+                                 help="(Optional) File path suffix")
     starting_parser.add_argument("-i", "--index", required=True,
                                  help="Column name to merge across tables")
     starting_parser.add_argument("-v", "--value", required=True,
@@ -37,7 +42,7 @@ def ends_with_slash(string):
 
 def parse_namespace():
     namespace = parse_args()
-    return namespace.groupdata, namespace.index, namespace.value, namespace.alpha, namespace.no_filter, namespace.output
+    return namespace.groupdata, namespace.prefix, namespace.suffix, namespace.index, namespace.value, namespace.alpha, namespace.no_filter, namespace.output
 
 
 def multi_core_queue(function_to_parallelize, queue):
@@ -347,17 +352,14 @@ class Exporter:
         return output_df
 
 
-class Visualizer:
-    pass
-
-
 if __name__ == '__main__':
-    inputGroupDataFileName, indexColName, valueColName, globalAlpha, noFilterBool, outputDir = parse_namespace()
+    inputGroupDataFileName, mainPrefix, mainSuffix, indexColName, valueColName, globalAlpha, noFilterBool, outputDir = parse_namespace()
     outputDir = ends_with_slash(outputDir)
     os.makedirs(outputDir, exist_ok=True)
 
     print("Parsing groups data")
-    groupDataDF = pd.read_table(inputGroupDataFileName, sep='\t', header='infer', names=["file_name", "group_name"], engine='python')
+    groupDataDF = pd.read_table(inputGroupDataFileName, sep='\t', header='infer', names=["sample_name", "group_name"], engine='python')
+    groupDataDF["file_name"] = mainPrefix.strip() + groupDataDF["sample_name"] + mainSuffix.strip()
     print("Validating files")
     groupDataDF = groupDataDF.loc[groupDataDF["file_name"].map(lambda x: os.path.isfile(x))]
     if len(groupDataDF) == 0:
