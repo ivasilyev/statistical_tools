@@ -360,10 +360,14 @@ if __name__ == '__main__':
     print("Parsing groups data")
     groupDataDF = pd.read_table(inputGroupDataFileName, sep='\t', header='infer', names=["sample_name", "group_name"], engine='python')
     groupDataDF["file_name"] = mainPrefix.strip() + groupDataDF["sample_name"] + mainSuffix.strip()
+    filesToValidate = groupDataDF["file_name"].values.tolist()
     print("Validating files")
     groupDataDF = groupDataDF.loc[groupDataDF["file_name"].map(lambda x: os.path.isfile(x))]
     if len(groupDataDF) == 0:
         raise ValueError("No valid files found!")
+    invalidFiles = [i for i in filesToValidate if i not in groupDataDF["file_name"].values.tolist()]
+    if len(invalidFiles) > 0:
+        print("Warning! The files have not been found: \n'{}'\n".format("'\n'").join(invalidFiles))
 
     groupsRawList = sorted(groupDataDF["group_name"].unique().tolist())
     groupsParsedList = [ComparingGroupParser(i) for i in groupsRawList]
