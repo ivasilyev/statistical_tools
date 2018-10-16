@@ -367,7 +367,7 @@ if __name__ == '__main__':
         raise ValueError("No valid files found!")
     invalidFiles = [i for i in filesToValidate if i not in groupDataDF["file_name"].values.tolist()]
     if len(invalidFiles) > 0:
-        print("Warning! The files have not been found: \n'{}'\n".format("'\n'").join(invalidFiles))
+        print("Warning! The files have not been found: \n{}\n".format(("\n").join(invalidFiles)))
 
     groupsRawList = sorted(groupDataDF["group_name"].unique().tolist())
     groupsParsedList = [ComparingGroupParser(i) for i in groupsRawList]
