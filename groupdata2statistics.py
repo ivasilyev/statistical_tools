@@ -62,7 +62,10 @@ class ComparingGroupParser:
     @staticmethod
     def read_table_slice(table_file_name):
         df = pd.read_table(table_file_name, sep='\t', header=0, engine='python')
-        output_dataframe = df.loc[:, [indexColName, valueColName]]
+        columns = [indexColName, valueColName]
+        output_dataframe = df.loc[:, columns]
+        if any(i not in list(df) for i in columns):
+            raise ValueError("Not all columns '{}' are present in table columns '{}'".format(columns, list(df)))
         return output_dataframe.rename(columns={valueColName: table_file_name})
     def group_name2df(self):
         group_dataframe = pd.DataFrame()
