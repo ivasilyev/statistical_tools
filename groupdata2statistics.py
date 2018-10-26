@@ -65,7 +65,7 @@ class ComparingGroupParser:
         columns = [indexColName, valueColName]
         output_dataframe = df.loc[:, columns]
         if any(i not in list(df) for i in columns):
-            raise ValueError("Not all columns '{}' are present in table columns '{}'".format(columns, list(df)))
+            raise ValueError("Not all columns \"{}\" are present in table columns \"{}\"".format(columns, list(df)))
         return output_dataframe.rename(columns={valueColName: table_file_name})
     def group_name2df(self):
         group_dataframe = pd.DataFrame()
