@@ -126,11 +126,11 @@ class ComparingGroupParser:
     def mp_count_base_stats(self, index_string):
         return pd.Series(self.dict2pd_series(self.list2base_stats(self.get_values_list(index_string))), name=index_string)
     def create_base_stats_df(self):
-        df = pd.concat(multi_core_queue(self.mp_count_base_stats, indexList), axis=1).transpose()
+        df = pd.concat(multi_core_queue(self.mp_count_base_stats, indexList), axis=1, sort=False).transpose()
         df.index.names = [indexColName]
         return df
     def recreate_pivot_df(self):
-        df = pd.concat(multi_core_queue(self.get_values_series, indexList), axis=1).transpose()
+        df = pd.concat(multi_core_queue(self.get_values_series, indexList), axis=1, sort=False).transpose()
         df.index.names = [indexColName]
         return df
 
@@ -193,7 +193,7 @@ class GroupComparator:
             for function_name in output_dict:
                 output_dict[function_name].append(pvals_dict[function_name])
         for function_name in output_dict:
-            df = pd.concat(output_dict[function_name], axis=1).transpose()
+            df = pd.concat(output_dict[function_name], axis=1, sort=False).transpose()
             df.index.names = [indexColName]
             output_dict[function_name] = df
         return output_dict
@@ -212,9 +212,9 @@ class GroupComparator:
         group_1 = self.group_pair_list[0]
         group_2 = self.group_pair_list[-1]
         prevalent_function_name = "sum"
-        df = pd.concat([i.loc[:, [prevalent_function_name]].rename(columns={c: j for c in list(i)}) for (i, j) in [(o.create_base_stats_df(), o.name) for o in [group_1, group_2]]], axis=1)
+        df = pd.concat([i.loc[:, [prevalent_function_name]].rename(columns={c: j for c in list(i)}) for (i, j) in [(o.create_base_stats_df(), o.name) for o in [group_1, group_2]]], axis=1, sort=False)
         queue = [df.loc[i, :] for i in df.index.tolist()]
-        output_df = pd.concat(multi_core_queue(self.mp_get_prevalent, queue), axis=1).transpose()
+        output_df = pd.concat(multi_core_queue(self.mp_get_prevalent, queue), axis=1, sort=False).transpose()
         output_df.index.names = [indexColName]
         return output_df
 
@@ -239,7 +239,7 @@ class MultipleComparator:
                 df.rename(columns={"p-value": comparison.name}, inplace=True)
                 single_pvals_dfs_dict[single_pvals_method].append(df)
         # Replacing 'NA' with 1
-        return {k: pd.concat(single_pvals_dfs_dict[k], axis=1).fillna(1) for k in single_pvals_dfs_dict}
+        return {k: pd.concat(single_pvals_dfs_dict[k], axis=1, sort=False).fillna(1) for k in single_pvals_dfs_dict}
     @staticmethod
     def create_multi_pvals_functions_list():
         return [  # Description: http://www.statsmodels.org/devel/generated/statsmodels.sandbox.stats.multicomp.multipletests.html#statsmodels.sandbox.stats.multicomp.multipletests
@@ -288,7 +288,7 @@ class MultipleComparator:
         for single_pvals_method in self.single_pvals_dfs_dict:
             df = self.single_pvals_dfs_dict[single_pvals_method]
             queue = [{"index_string": i, "pvals_list": df.loc[i].values.tolist(), "colnames_list": list(df)} for i in df.index.tolist()]
-            output_dict.update({single_pvals_method: pd.concat(multi_core_queue(self.mp_count_multi_pvals, queue), axis=1).transpose()})
+            output_dict.update({single_pvals_method: pd.concat(multi_core_queue(self.mp_count_multi_pvals, queue), axis=1, sort=False).transpose()})
         return output_dict
 
 
@@ -299,7 +299,7 @@ class Exporter:
         for group in groupsParsedList:
             df = group.recreate_pivot_df()
             output_list.append(df.rename(columns={i: group.name + "_" + i for i in list(df)}))
-        out = pd.concat(output_list, axis=1)
+        out = pd.concat(output_list, axis=1, sort=False)
         out.index.names = [indexColName]
         return out
     @staticmethod
@@ -308,7 +308,7 @@ class Exporter:
         for group in groupsParsedList:
             df = group.create_base_stats_df()
             output_list.append(df.rename(columns={i: group.name + "_" + i for i in list(df)}))
-        out = pd.concat(output_list, axis=1)
+        out = pd.concat(output_list, axis=1, sort=False)
         out.index.names = [indexColName]
         return out
     @staticmethod
@@ -318,7 +318,7 @@ class Exporter:
             for single_pvals_method in comparison.dfs_dict:
                 df = comparison.dfs_dict[single_pvals_method]
                 output_list.append(df.rename(columns={i: "_".join([comparison.name, single_pvals_method, i]) for i in list(df)}))
-        out = pd.concat(output_list, axis=1)
+        out = pd.concat(output_list, axis=1, sort=False)
         out.index.names = [indexColName]
         return out
     @staticmethod
@@ -327,7 +327,7 @@ class Exporter:
         for comparison in groupComparisonsList:
             df = comparison.create_prevalents_df()
             output_list.append(df.rename(columns={i: "_".join([comparison.name, i]) for i in list(df)}))
-        out = pd.concat(output_list, axis=1)
+        out = pd.concat(output_list, axis=1, sort=False)
         out.index.names = [indexColName]
         return out
     @staticmethod
@@ -336,12 +336,12 @@ class Exporter:
         for single_pvals_method in correctionObject.multi_pvals_dfs_dict:
             df = correctionObject.multi_pvals_dfs_dict[single_pvals_method]
             output_list.append(df.rename(columns={i: i + "_for_" + single_pvals_method for i in list(df)}))
-        out = pd.concat(output_list, axis=1)
+        out = pd.concat(output_list, axis=1, sort=False)
         out.index.names = [indexColName]
         return out
     def merge_everything(self):
         output_list = [i() for i in [self.merge_pivot_df, self.merge_base_stats_df, self.merge_single_pvals_df, self.merge_prevalents_df, self.merge_multi_pvals_df]]
-        out = pd.concat(output_list, axis=1)
+        out = pd.concat(output_list, axis=1, sort=False)
         out.index.names = [indexColName]
         return out
     @staticmethod
@@ -350,7 +350,7 @@ class Exporter:
         return pd.Series(ComparingGroupParser.dict2pd_series(output_dict), name=series.name)
     def concat_rejected_counter(self, input_df):
         queue = [input_df.loc[i, :] for i in input_df.index.tolist()]
-        df = pd.concat(multi_core_queue(self._mp_count_rejected_null_hypothesis, queue), axis=1).transpose()
+        df = pd.concat(multi_core_queue(self._mp_count_rejected_null_hypothesis, queue), axis=1, sort=False).transpose()
         output_df = pd.concat([input_df, df], axis=1).sort_values(by="null_hypothesis_rejections_counter", ascending=False)
         return output_df
 
