@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import scipy.stats
 import os
+import re
 import multiprocessing
 import statsmodels.sandbox.stats.multicomp
 import statistics
@@ -294,11 +295,14 @@ class MultipleComparator:
 
 class Exporter:
     @staticmethod
+    def prepare_string(s: str):
+        return re.sub("@+", "_", s)
+    @staticmethod
     def merge_pivot_df():
         output_list = []
         for group in groupsParsedList:
             df = group.recreate_pivot_df()
-            output_list.append(df.rename(columns={i: group.name + "_" + i for i in list(df)}))
+            output_list.append(df.rename(columns={i: "{}@{}".format(group.name, Exporter.prepare_string(i)) for i in list(df)}))
         out = pd.concat(output_list, axis=1, sort=False)
         out.index.names = [indexColName]
         return out
@@ -307,7 +311,7 @@ class Exporter:
         output_list = []
         for group in groupsParsedList:
             df = group.create_base_stats_df()
-            output_list.append(df.rename(columns={i: group.name + "_" + i for i in list(df)}))
+            output_list.append(df.rename(columns={i: "{}@{}".format(group.name, Exporter.prepare_string(i)) for i in list(df)}))
         out = pd.concat(output_list, axis=1, sort=False)
         out.index.names = [indexColName]
         return out
