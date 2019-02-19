@@ -386,5 +386,7 @@ if __name__ == '__main__':
     correctionObject = MultipleComparator()
     exporter = Exporter()
     exporterDF = exporter.merge_everything()
-    exporter.concat_rejected_counter(exporterDF).reset_index().to_csv(outputDir + '_'.join([i.name for i in groupsParsedList]) + "_total_dataframe.tsv", sep='\t', index=False)
+    outputDF = exporter.concat_rejected_counter(exporterDF).reset_index()
+    outputDF.loc[:, [i for i in list(outputDF) if len(i.strip()) > 0]].to_csv(
+        outputDir + '_'.join([i.name for i in groupsParsedList]) + "_total_dataframe.tsv", sep='\t', index=False)
     print("Completed")
